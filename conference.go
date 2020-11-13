@@ -2,20 +2,24 @@ package main
 
 import (
 	"context"
-	"log"
+
+	"github.com/opentracing/opentracing-go"
 )
 
-type conferenceService struct{}
+type conferenceService struct {
+	tracer opentracing.Tracer
+}
 
-func (conferenceService) List(ctx context.Context, r ListConferenceRequest) (*ListConferenceResponse, error) {
-
-	log.Println("list")
+func (s conferenceService) List(ctx context.Context, r ListConferenceRequest) (*ListConferenceResponse, error) {
+	span, ctx := opentracing.StartSpanFromContext(ctx, "conference.list")
+	defer span.Finish()
 	resp := &ListConferenceResponse{}
 	return resp, nil
 }
 
-func (conferenceService) Get(ctx context.Context, r GetConferenceRequest) (*GetConferenceResponse, error) {
-	log.Println("get")
+func (s conferenceService) Get(ctx context.Context, r GetConferenceRequest) (*GetConferenceResponse, error) {
+	span, ctx := opentracing.StartSpanFromContext(ctx, "conference.get")
+	defer span.Finish()
 	resp := &GetConferenceResponse{
 		Conference: Conference{
 			Name: "Gophercon",

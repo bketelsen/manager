@@ -6,8 +6,8 @@ import (
 	"context"
 	"net/http"
 
+	"github.com/opentracing/opentracing-go"
 	"github.com/pacedotdev/oto/otohttp"
-	"gorm.io/gorm"
 )
 
 // ConferenceService is a service for managing Conferences
@@ -19,13 +19,15 @@ type ConferenceService interface {
 
 type conferenceServiceServer struct {
 	server            *otohttp.Server
+	tracer            opentracing.Tracer
 	conferenceService ConferenceService
 }
 
 // Register adds the ConferenceService to the otohttp.Server.
-func RegisterConferenceService(server *otohttp.Server, conferenceService ConferenceService) {
+func RegisterConferenceService(tracer opentracing.Tracer, server *otohttp.Server, conferenceService ConferenceService) {
 	handler := &conferenceServiceServer{
 		server:            server,
+		tracer:            tracer,
 		conferenceService: conferenceService,
 	}
 	server.Register("ConferenceService", "Get", handler.handleGet)
@@ -34,11 +36,30 @@ func RegisterConferenceService(server *otohttp.Server, conferenceService Confere
 
 func (s *conferenceServiceServer) handleGet(w http.ResponseWriter, r *http.Request) {
 	var request GetConferenceRequest
+	var parentCtx opentracing.SpanContext
+	parentSpan := opentracing.SpanFromContext(r.Context())
+	if parentSpan != nil {
+		parentCtx = parentSpan.Context()
+	}
+
+	// start a new Span to wrap HTTP request
+	span := s.tracer.StartSpan(
+		"ConferenceService.Get",
+		opentracing.ChildOf(parentCtx),
+	)
+
+	// make sure the Span is finished once we're done
+	defer span.Finish()
+
+	// make the Span current in the context
+	ctx := opentracing.ContextWithSpan(r.Context(), span)
+
+	defer span.Finish()
 	if err := otohttp.Decode(r, &request); err != nil {
 		s.server.OnErr(w, r, err)
 		return
 	}
-	response, err := s.conferenceService.Get(r.Context(), request)
+	response, err := s.conferenceService.Get(ctx, request)
 	if err != nil {
 		s.server.OnErr(w, r, err)
 		return
@@ -51,11 +72,30 @@ func (s *conferenceServiceServer) handleGet(w http.ResponseWriter, r *http.Reque
 
 func (s *conferenceServiceServer) handleList(w http.ResponseWriter, r *http.Request) {
 	var request ListConferenceRequest
+	var parentCtx opentracing.SpanContext
+	parentSpan := opentracing.SpanFromContext(r.Context())
+	if parentSpan != nil {
+		parentCtx = parentSpan.Context()
+	}
+
+	// start a new Span to wrap HTTP request
+	span := s.tracer.StartSpan(
+		"ConferenceService.List",
+		opentracing.ChildOf(parentCtx),
+	)
+
+	// make sure the Span is finished once we're done
+	defer span.Finish()
+
+	// make the Span current in the context
+	ctx := opentracing.ContextWithSpan(r.Context(), span)
+
+	defer span.Finish()
 	if err := otohttp.Decode(r, &request); err != nil {
 		s.server.OnErr(w, r, err)
 		return
 	}
-	response, err := s.conferenceService.List(r.Context(), request)
+	response, err := s.conferenceService.List(ctx, request)
 	if err != nil {
 		s.server.OnErr(w, r, err)
 		return
@@ -68,7 +108,6 @@ func (s *conferenceServiceServer) handleList(w http.ResponseWriter, r *http.Requ
 
 // Conference is an event
 type Conference struct {
-	gorm.Model
 	Name string `json:"name"`
 }
 
@@ -78,7 +117,6 @@ type GetConferenceRequest struct {
 
 // GetConferenceResponse is the response object containing a single Conference
 type GetConferenceResponse struct {
-
 	// Conference represents an event like GopherCon 2020
 	Conference Conference `json:"conference"`
 	// Error is string explaining what went wrong. Empty if everything was fine.
@@ -91,7 +129,6 @@ type ListConferenceRequest struct {
 
 // ListConferenceResponse is the response object containing a list of Conferences
 type ListConferenceResponse struct {
-
 	// Greeting is a nice message welcoming somebody.
 	Conferences []Conference `json:"conferences"`
 	// Error is string explaining what went wrong. Empty if everything was fine.
